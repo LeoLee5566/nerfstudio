@@ -29,25 +29,27 @@ from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 from nerfstudio.cameras.rays import RayBundle, RaySamples
-from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
+from nerfstudio.engine.callbacks import (TrainingCallback,
+                                         TrainingCallbackAttributes,
+                                         TrainingCallbackLocation)
 from nerfstudio.field_components.field_heads import FieldHeadNames
 from nerfstudio.field_components.spatial_distortions import SceneContraction
 from nerfstudio.fields.density_fields import HashMLPDensityField
 from nerfstudio.fields.nerfacto_field import NerfactoField
 from nerfstudio.model_components.losses import (
-    MSELoss,
-    distortion_loss,
-    interlevel_loss,
-    orientation_loss,
-    pred_normal_loss,
-    scale_gradients_by_distance_squared,
-)
-from nerfstudio.model_components.ray_samplers import ProposalNetworkSampler, UniformSampler
-from nerfstudio.model_components.renderers import AccumulationRenderer, DepthRenderer, NormalsRenderer, RGBRenderer
+    MSELoss, distortion_loss, interlevel_loss, orientation_loss,
+    pred_normal_loss, scale_gradients_by_distance_squared)
+from nerfstudio.model_components.ray_samplers import (ProposalNetworkSampler,
+                                                      UniformSampler)
+from nerfstudio.model_components.renderers import (AccumulationRenderer,
+                                                   DepthRenderer,
+                                                   NormalsRenderer,
+                                                   RGBRenderer)
 from nerfstudio.model_components.scene_colliders import NearFarCollider
 from nerfstudio.model_components.shaders import NormalsShader
 from nerfstudio.models.base_model import Model, ModelConfig
 from nerfstudio.utils import colormaps
+from nerfstudio.viewer.server.viewer_elements import *
 
 
 @dataclass
@@ -136,7 +138,39 @@ class NerfactoModel(Model):
     """
 
     config: NerfactoModelConfig
+    
+    def __init__(
+        self,
+        config: NerfactoModelConfig,
+        **kwargs,
+    ) -> None:
+        self.viewer_control = ViewerControl()
+        super().__init__(config=config, **kwargs)
+        def button_cb(button):
+            # example of using the get_camera function, pass img width and height
+            # returns a Cameras object with 1 camera
+            camera = self.viewer_control.get_camera(100,100)
+            if camera is None:
+                # returns None when the viewer is not connected yet
+                return
+            # get the camera pose
+            camera_extrinsics_matrix = camera.camera_to_worlds[0,...]  # 3x4 matrix
+            # generate image RayBundle
+            bundle = camera.generate_rays(camera_indices=0,coords=torch.tensor([[50.,50.]]))
+            # Compute depth, move camera, or whatever you want
+            bundle = self.collider(bundle)
+            ray_samples: RaySamples
+            sampler = UniformSampler(train_stratified=False,single_jitter=self.config.use_single_jitter)
+            ray_samples = sampler.generate_ray_samples(bundle,num_samples=100)
+            field_outputs = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
+            if self.config.use_gradient_scaling:
+                field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
+            density = field_outputs[FieldHeadNames.DENSITY]
+            self.custom_value.value = str(density)
+        self.viewer_button = ViewerButton(name="Get Density",cb_hook=button_cb)
+        self.custom_value = ViewerText(name="Densities", default_value='[]')
 
+        
     def populate_modules(self):
         """Set the fields and modules."""
         super().populate_modules()
@@ -282,7 +316,9 @@ class NerfactoModel(Model):
         weights = ray_samples.get_weights(field_outputs[FieldHeadNames.DENSITY])
         weights_list.append(weights)
         ray_samples_list.append(ray_samples)
-
+        
+        
+        
         rgb = self.renderer_rgb(rgb=field_outputs[FieldHeadNames.RGB], weights=weights)
         depth = self.renderer_depth(weights=weights, ray_samples=ray_samples)
         accumulation = self.renderer_accumulation(weights=weights)
