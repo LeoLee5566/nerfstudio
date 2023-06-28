@@ -38,24 +38,23 @@ from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName
 from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.server.control_panel import ControlPanel
 from nerfstudio.viewer.server.gui_utils import parse_object
-from nerfstudio.viewer.server.render_state_machine import (
-    RenderAction,
-    RenderStateMachine,
-)
-from nerfstudio.viewer.server.utils import get_intrinsics_matrix_and_camera_to_world_h
-from nerfstudio.viewer.server.viewer_elements import ViewerControl, ViewerElement
+from nerfstudio.viewer.server.render_state_machine import (RenderAction,
+                                                           RenderStateMachine)
+from nerfstudio.viewer.server.utils import \
+    get_intrinsics_matrix_and_camera_to_world_h
+from nerfstudio.viewer.server.viewer_elements import (ViewerButton,
+                                                      ViewerControl,
+                                                      ViewerElement,
+                                                      ViewerText)
 from nerfstudio.viewer.viser import ViserServer
-from nerfstudio.viewer.viser.messages import (
-    CameraMessage,
-    CameraPathOptionsRequest,
-    CameraPathPayloadMessage,
-    ClickMessage,
-    CropParamsMessage,
-    NerfstudioMessage,
-    SaveCheckpointMessage,
-    TimeConditionMessage,
-    TrainingStateMessage,
-)
+from nerfstudio.viewer.viser.messages import (CameraMessage,
+                                              CameraPathOptionsRequest,
+                                              CameraPathPayloadMessage,
+                                              ClickMessage, CropParamsMessage,
+                                              NerfstudioMessage,
+                                              SaveCheckpointMessage,
+                                              TimeConditionMessage,
+                                              TrainingStateMessage)
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -178,6 +177,9 @@ class ViewerState:
             c._setup(self)
         self.render_statemachine = RenderStateMachine(self)
         self.render_statemachine.start()
+
+        self.check = None
+        self.second_model = None
 
     def _output_type_change(self, _):
         self.output_type_changed = True

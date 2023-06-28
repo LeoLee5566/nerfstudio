@@ -146,7 +146,7 @@ class NerfactoModel(Model):
     ) -> None:
         self.viewer_control = ViewerControl()
         super().__init__(config=config, **kwargs)
-        def button_cb(button):
+        def get_density(button):
             # example of using the get_camera function, pass img width and height
             # returns a Cameras object with 1 camera
             camera = self.viewer_control.get_camera(100,100)
@@ -166,9 +166,9 @@ class NerfactoModel(Model):
             if self.config.use_gradient_scaling:
                 field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
             density = field_outputs[FieldHeadNames.DENSITY]
-            self.custom_value.value = str(density)
-        self.viewer_button = ViewerButton(name="Get Density",cb_hook=button_cb)
-        self.custom_value = ViewerText(name="Densities", default_value='[]')
+            self.central_density_value.value = str(density)
+        self.get_density_button = ViewerButton(name="Get Density",cb_hook=get_density)
+        self.central_density_value = ViewerText(name="Densities", default_value='[]')
 
         
     def populate_modules(self):

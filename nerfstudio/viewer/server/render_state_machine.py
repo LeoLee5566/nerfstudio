@@ -23,10 +23,12 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args
 import torch
 
 from nerfstudio.cameras.cameras import Cameras
-from nerfstudio.model_components.renderers import background_color_override_context
+from nerfstudio.model_components.renderers import \
+    background_color_override_context
 from nerfstudio.utils import colormaps, writer
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.server import viewer_utils
+from nerfstudio.viewer.server.viewer_elements import *
 from nerfstudio.viewer.viser.messages import CameraMessage
 
 if TYPE_CHECKING:
@@ -78,6 +80,7 @@ class RenderStateMachine(threading.Thread):
         self.interrupt_render_flag = False
         self.daemon = True
         self.output_keys = {}
+    
 
     def action(self, action: RenderAction):
         """Takes an action and updates the state machine
@@ -114,11 +117,12 @@ class RenderStateMachine(threading.Thread):
         """
 
         # initialize the camera ray bundle
+        model = self.viewer.get_model()
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
             crop_min=self.viewer.control_panel.crop_min,
             crop_max=self.viewer.control_panel.crop_max,
-            model=self.viewer.get_model(),
+            model=model,
         )
 
         image_height, image_width = self._calculate_image_res(cam_msg.aspect)
@@ -127,10 +131,10 @@ class RenderStateMachine(threading.Thread):
         assert camera is not None, "render called before viewer connected"
 
         with self.viewer.train_lock if self.viewer.train_lock is not None else contextlib.nullcontext():
-            camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=self.viewer.get_model().render_aabb)
+            camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=model.render_aabb)
 
             with TimeWriter(None, None, write=False) as vis_t:
-                self.viewer.get_model().eval()
+                model.eval()
                 step = self.viewer.step
                 if self.viewer.control_panel.crop_viewport:
                     color = self.viewer.control_panel.background_color
@@ -139,14 +143,14 @@ class RenderStateMachine(threading.Thread):
                     else:
                         background_color = torch.tensor(
                             [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
-                            device=self.viewer.get_model().device,
+                            device=model.device,
                         )
                     with background_color_override_context(background_color), torch.no_grad():
-                        outputs = self.viewer.get_model().get_outputs_for_camera_ray_bundle(camera_ray_bundle)
+                        outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 else:
                     with torch.no_grad():
-                        outputs = self.viewer.get_model().get_outputs_for_camera_ray_bundle(camera_ray_bundle)
-                self.viewer.get_model().train()
+                        outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
+                model.train()
         num_rays = len(camera_ray_bundle)
         render_time = vis_t.duration
         if writer.is_initialized():
