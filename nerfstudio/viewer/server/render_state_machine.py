@@ -118,6 +118,7 @@ class RenderStateMachine(threading.Thread):
 
         # initialize the camera ray bundle
         model = self.viewer.get_model()
+        second_model = self.viewer.second_model
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
             crop_min=self.viewer.control_panel.crop_min,
@@ -151,6 +152,22 @@ class RenderStateMachine(threading.Thread):
                     with torch.no_grad():
                         outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 model.train()
+                if second_model is not None:
+                    camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=second_model.render_aabb)
+                    second_model.eval()
+                    if self.viewer.control_panel.crop_viewport:
+                        background_color = torch.tensor([0.0, 0.0, 0.0], device=second_model.device)
+                        with background_color_override_context(background_color), torch.no_grad():
+                            second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
+                    else:
+                        with torch.no_grad():
+                            second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
+                    result = {}
+                    for key in outputs.keys():
+                        # calculating the mean of tensors
+                        mean_tensor = (outputs[key] + second_outputs[key]) / 2
+                        result[key] = mean_tensor
+                    outputs = result
         num_rays = len(camera_ray_bundle)
         render_time = vis_t.duration
         if writer.is_initialized():

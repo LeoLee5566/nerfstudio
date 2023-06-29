@@ -29,6 +29,7 @@ from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils import writer
 from nerfstudio.utils.eval_utils import eval_setup
+from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.viewer.server.viewer_elements import (ViewerButton,
                                                       ViewerControl,
                                                       ViewerElement,
@@ -94,13 +95,14 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         pipeline=pipeline,
     )
     
-    second_model_path = r'outputs\phenix_folder\nerfacto\2023-06-28_231727\config.yml'
-    _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
-    viewer_state.second_model = model.model
-    viewer_state.check = ViewerText(name="Second Model Params", default_value='')
-    viewer_state.check.value = str(model.model)
-    with viewer_state.control_panel.viser_server.gui_folder("Second Model"):
-        viewer_state.control_panel.add_element(viewer_state.check)
+    second_model_path = r"outputs\phenix_folder\nerfacto\2023-06-29_041030\config.yml"
+    if second_model_path is not None:
+        _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
+        viewer_state.second_model = model.model
+        viewer_state.check = ViewerText(name="Second Model Params", default_value='')
+        viewer_state.check.value = str(viewer_state.second_model)
+        with viewer_state.control_panel.viser_server.gui_folder("Second Model"):
+            viewer_state.control_panel.add_element(viewer_state.check)
         
     banner_messages = [f"Viewer at: {viewer_state.viewer_url}"]
 
