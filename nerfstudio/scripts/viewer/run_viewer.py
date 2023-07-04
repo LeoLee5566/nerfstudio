@@ -95,14 +95,11 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         pipeline=pipeline,
     )
     
-    second_model_path = r"outputs\phenix_folder\nerfacto\2023-06-29_041030\config.yml"
+    second_model_path = r"outputs\phenix_folder_heads\nerfacto\2023-07-03_223446\config.yml"
     if second_model_path is not None:
         _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
-        viewer_state.second_model = model.model
-        viewer_state.check = ViewerText(name="Second Model Params", default_value='')
-        viewer_state.check.value = str(viewer_state.second_model)
-        with viewer_state.control_panel.viser_server.gui_folder("Second Model"):
-            viewer_state.control_panel.add_element(viewer_state.check)
+        viewer_state.second_model = model.model # type: ignore
+        
         
     banner_messages = [f"Viewer at: {viewer_state.viewer_url}"]
 

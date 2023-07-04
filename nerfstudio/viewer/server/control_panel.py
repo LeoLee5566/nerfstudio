@@ -19,16 +19,14 @@ from typing import Callable, DefaultDict, List, Tuple, get_args
 import torch
 
 from nerfstudio.utils.colormaps import ColormapOptions, Colormaps
-from nerfstudio.viewer.server.viewer_elements import (
-    ViewerButtonGroup,
-    ViewerCheckbox,
-    ViewerDropdown,
-    ViewerElement,
-    ViewerNumber,
-    ViewerRGB,
-    ViewerSlider,
-    ViewerVec3,
-)
+from nerfstudio.viewer.server.viewer_elements import (ViewerButton,
+                                                      ViewerButtonGroup,
+                                                      ViewerCheckbox,
+                                                      ViewerDropdown,
+                                                      ViewerElement,
+                                                      ViewerNumber, ViewerRGB,
+                                                      ViewerSlider, ViewerText,
+                                                      ViewerVec3)
 from nerfstudio.viewer.viser import ViserServer
 
 
@@ -51,6 +49,8 @@ class ControlPanel:
         crop_update_cb: Callable,
         update_output_cb: Callable,
         update_split_output_cb: Callable,
+        get_density_cb: Callable,
+        set_pose_cb: Callable,
     ):
         # elements holds a mapping from tag: [elements]
         self.viser_server = viser_server
@@ -174,6 +174,18 @@ class ControlPanel:
             self.add_element(self._crop_max, additional_tags=("crop",))
 
         self.add_element(self._time, additional_tags=("time",))
+        
+        self.get_density_button = ViewerButton(name="Get Density",cb_hook=get_density_cb)
+        self.central_density_value = ViewerText(name="Densities", default_value='[]')
+
+        self.set_pose_button = ViewerButton(name="Set Camera Pose",cb_hook=set_pose_cb)
+        self.camera_pose = ViewerText(name="Camera Pose", default_value='()')
+        
+        with self.viser_server.gui_folder("Camera Info"):
+            self.add_element(self.central_density_value)
+            self.add_element(self.get_density_button)
+            self.add_element(self.camera_pose)
+            self.add_element(self.set_pose_button)
 
     def _train_speed_cb(self) -> None:
         """Callback for when the train speed is changed"""

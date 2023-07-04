@@ -15,6 +15,8 @@
 """ Manage the state of the viewer """
 from __future__ import annotations
 
+import json
+import re
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Literal, Optional
@@ -26,9 +28,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
+from nerfstudio.cameras.rays import RayBundle, RaySamples
 from nerfstudio.configs import base_config as cfg
 from nerfstudio.data.datasets.base_dataset import InputDataset
 from nerfstudio.data.scene_box import SceneBox
+from nerfstudio.field_components.field_heads import FieldHeadNames
+from nerfstudio.model_components.ray_samplers import UniformSampler
 from nerfstudio.models.base_model import Model
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils.decorators import check_main_thread, decorate_all
@@ -142,6 +147,8 @@ class ViewerState:
             self._crop_params_update,
             self._output_type_change,
             self._output_split_type_change,
+            self._get_density,
+            self._set_pose,
         )
 
         def nested_folder_install(folder_labels: List[str], element: ViewerElement):
@@ -177,8 +184,8 @@ class ViewerState:
             c._setup(self)
         self.render_statemachine = RenderStateMachine(self)
         self.render_statemachine.start()
+        
 
-        self.check = None
         self.second_model = None
 
     def _output_type_change(self, _):
@@ -191,6 +198,38 @@ class ViewerState:
         """Interrupt current render."""
         if self.camera_message is not None:
             self.render_statemachine.action(RenderAction("rerender", self.camera_message))
+            
+    def _get_density(self, _) -> None:
+        camera = self.get_camera(100,100)
+        if camera is None:
+                # returns None when the viewer is not connected yet
+                return
+        bundle = camera.generate_rays(camera_indices=0,coords=torch.tensor([[50.,50.]]))
+        model = self.get_model()
+        bundle = model.collider(bundle) # type: ignore
+        ray_samples: RaySamples
+        sampler = UniformSampler(train_stratified=False)
+        ray_samples = sampler.generate_ray_samples(bundle,num_samples=100)
+        field_outputs = model.field.forward(ray_samples) # type: ignore
+        density = field_outputs[FieldHeadNames.DENSITY]
+        self.control_panel.central_density_value.value = str(density)
+        self.control_panel.camera_pose.value = json.dumps(self.camera_message, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+    
+    def _set_pose(self, _) -> None:
+        msg = json.loads(self.control_panel.camera_pose.value)
+        msg = CameraMessage(
+            aspect=msg['aspect'],
+            camera_type=msg['camera_type'],
+            fov=msg['fov'],
+            is_moving=msg['is_moving'],
+            matrix=msg['matrix'],
+            render_aspect=msg['render_aspect'],
+            timestamp=msg['timestamp']
+        )
+        self.camera_message = msg
+        self._interrupt_render
+
+        
 
     def _crop_params_update(self, _) -> None:
         """Update crop parameters"""
@@ -229,7 +268,7 @@ class ViewerState:
         if message.is_moving:
             self.render_statemachine.action(RenderAction("move", self.camera_message))
             if self.training_state == "training":
-                self.training_state = "paused"
+                self.training_state = "paused"           
         else:
             self.render_statemachine.action(RenderAction("static", self.camera_message))
             self.training_state = self.train_btn_state

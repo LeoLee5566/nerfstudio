@@ -153,7 +153,6 @@ class RenderStateMachine(threading.Thread):
                         outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 model.train()
                 if second_model is not None:
-                    camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=second_model.render_aabb)
                     second_model.eval()
                     if self.viewer.control_panel.crop_viewport:
                         background_color = torch.tensor([0.0, 0.0, 0.0], device=second_model.device)
@@ -164,7 +163,6 @@ class RenderStateMachine(threading.Thread):
                             second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                     result = {}
                     for key in outputs.keys():
-                        # calculating the mean of tensors
                         mean_tensor = (outputs[key] + second_outputs[key]) / 2
                         result[key] = mean_tensor
                     outputs = result
