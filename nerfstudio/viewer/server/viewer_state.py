@@ -204,9 +204,11 @@ class ViewerState:
         if camera is None:
                 # returns None when the viewer is not connected yet
                 return
-        bundle = camera.generate_rays(camera_indices=0,coords=torch.tensor([[50.,50.]]))
         model = self.get_model()
-        bundle = model.collider(bundle) # type: ignore
+        bundle = camera.generate_rays(camera_indices=0,coords=torch.tensor([[50.,50.]]),aabb_box=model.render_aabb)
+        ones = torch.ones_like(bundle.origins[..., 0:1])
+        bundle.nears = ones * 0.
+        bundle.fars = ones * 1000.
         ray_samples: RaySamples
         sampler = UniformSampler(train_stratified=False)
         ray_samples = sampler.generate_ray_samples(bundle,num_samples=100)

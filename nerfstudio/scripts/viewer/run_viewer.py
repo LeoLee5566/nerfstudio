@@ -95,7 +95,7 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         pipeline=pipeline,
     )
     
-    second_model_path = r"outputs\phenix_folder_heads\nerfacto\2023-07-03_223446\config.yml"
+    second_model_path = config.viewer.second_model_path
     if second_model_path is not None:
         _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
         viewer_state.second_model = model.model # type: ignore

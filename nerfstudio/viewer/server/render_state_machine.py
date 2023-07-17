@@ -153,7 +153,6 @@ class RenderStateMachine(threading.Thread):
                         outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 model.train()
                 if second_model is not None:
-                    second_model.eval()
                     if self.viewer.control_panel.crop_viewport:
                         background_color = torch.tensor([0.0, 0.0, 0.0], device=second_model.device)
                         with background_color_override_context(background_color), torch.no_grad():
