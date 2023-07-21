@@ -21,11 +21,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args
 
 import torch
+import torch.nn.functional as F
 
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.model_components.renderers import \
     background_color_override_context
 from nerfstudio.utils import colormaps, writer
+from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.server.viewer_elements import *
@@ -153,6 +155,7 @@ class RenderStateMachine(threading.Thread):
                         outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 model.train()
                 if second_model is not None:
+                    second_model.eval()
                     if self.viewer.control_panel.crop_viewport:
                         background_color = torch.tensor([0.0, 0.0, 0.0], device=second_model.device)
                         with background_color_override_context(background_color), torch.no_grad():
@@ -161,8 +164,19 @@ class RenderStateMachine(threading.Thread):
                         with torch.no_grad():
                             second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                     result = {}
-                    for key in outputs.keys():
-                        mean_tensor = (outputs[key] + second_outputs[key]) / 2
+                    # outputs[RGB].shape = (n_rays, 3)
+                    # outputs[weights].shape = (n_rays, n_samples)
+                    if self.viewer.blender_method == 'density':
+                        stacked_weight = torch.stack((outputs['weights'].sum(dim=2), second_outputs['weights'].sum(dim=2)), dim=2)
+                        weight = F.softmax(stacked_weight, dim=2)
+                    else:
+                        weight_values = torch.tensor([0.5, 0.5])
+                        weight = weight_values[None, None, :].expand(outputs['rgb'].shape[0], outputs['rgb'].shape[1], 2)
+                    weight = weight.to(outputs['rgb'].device)
+                    for key,value in outputs.items():
+                        if key == 'weight' or not torch.is_tensor(value):
+                            continue
+                        mean_tensor =  weight[..., 0, None] * outputs[key] + weight[..., 1, None] * second_outputs[key]
                         result[key] = mean_tensor
                     outputs = result
         num_rays = len(camera_ray_bundle)

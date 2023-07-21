@@ -294,6 +294,7 @@ class NerfactoModel(Model):
             "rgb": rgb,
             "accumulation": accumulation,
             "depth": depth,
+            'weights': weights,  # (n_rays, n_samples)
         }
 
         if self.config.predict_normals:

@@ -21,7 +21,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import nn
@@ -31,8 +31,10 @@ from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.configs.base_config import InstantiateConfig
 from nerfstudio.configs.config_utils import to_immutable_dict
 from nerfstudio.data.scene_box import SceneBox
-from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
+from nerfstudio.engine.callbacks import (TrainingCallback,
+                                         TrainingCallbackAttributes)
 from nerfstudio.model_components.scene_colliders import NearFarCollider
+from nerfstudio.utils.rich_utils import CONSOLE
 
 
 # Model related configs
@@ -179,7 +181,6 @@ class Model(nn.Module):
             outputs = self.forward(ray_bundle=ray_bundle)
             for output_name, output in outputs.items():  # type: ignore
                 if not torch.is_tensor(output):
-                    # TODO: handle lists of tensors as well
                     continue
                 outputs_lists[output_name].append(output)
         outputs = {}

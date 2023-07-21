@@ -147,3 +147,4 @@ class ViewerConfig(PrintableConfig):
     jpeg_quality: int = 90
     """Quality tradeoff to use for jpeg compression."""
     second_model_path: Optional[str] = None
+    blender_method: Optional[str] = 'average'

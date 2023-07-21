@@ -187,6 +187,7 @@ class ViewerState:
         
 
         self.second_model = None
+        self.blender_method = 'average'
 
     def _output_type_change(self, _):
         self.output_type_changed = True
@@ -229,7 +230,7 @@ class ViewerState:
             timestamp=msg['timestamp']
         )
         self.camera_message = msg
-        self._interrupt_render
+        self.render_statemachine.action(RenderAction("move", self.camera_message))
 
         
 

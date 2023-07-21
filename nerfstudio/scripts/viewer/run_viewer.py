@@ -107,6 +107,7 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
     if second_model_path is not None:
         _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
         viewer_state.second_model = model.model # type: ignore
+        viewer_state.blender_method = config.viewer.blender_method # type: ignore
         
         
     if config.vis == "viewer_beta":
