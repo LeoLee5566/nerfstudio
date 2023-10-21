@@ -27,11 +27,6 @@ from threading import Lock
 from typing import Dict, List, Literal, Optional, Tuple, Type, cast
 
 import torch
-from rich import box, style
-from rich.panel import Panel
-from rich.table import Table
-from torch.cuda.amp.grad_scaler import GradScaler
-
 from nerfstudio.configs.experiment_config import ExperimentConfig
 from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
 from nerfstudio.engine.callbacks import (TrainingCallback,
@@ -47,6 +42,10 @@ from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.utils.writer import EventName, TimeWriter
 from nerfstudio.viewer.server.viewer_state import ViewerState
 from nerfstudio.viewer_beta.viewer import Viewer as ViewerBetaState
+from rich import box, style
+from rich.panel import Panel
+from rich.table import Table
+from torch.cuda.amp.grad_scaler import GradScaler
 
 TRAIN_INTERATION_OUTPUT = Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]
 TORCH_DEVICE = str
@@ -174,13 +173,17 @@ class Trainer:
             )
             banner_messages = [f"Viewer at: {self.viewer_state.viewer_url}"]
         if self.config.is_viewer_beta_enabled() and self.local_rank == 0:
+            datapath = self.config.data
+            if datapath is None:
+                datapath = self.base_dir
             self.viewer_state = ViewerBetaState(
                 self.config.viewer,
                 log_filename=viewer_log_path,
-                datapath=self.base_dir,
+                datapath=datapath,
                 pipeline=self.pipeline,
                 trainer=self,
                 train_lock=self.train_lock,
+                share=self.config.viewer.make_share_url,
             )
             banner_messages = [f"Viewer Beta at: {self.viewer_state.viewer_url}"]
         self._check_viewer_warnings()
@@ -200,6 +203,7 @@ class Trainer:
         writer.setup_event_writer(
             self.config.is_wandb_enabled(),
             self.config.is_tensorboard_enabled(),
+            self.config.is_comet_enabled(),
             log_dir=writer_log_path,
             experiment_name=self.config.experiment_name,
             project_name=self.config.project_name,
@@ -218,13 +222,6 @@ class Trainer:
         """
         optimizer_config = self.config.optimizers.copy()
         param_groups = self.pipeline.get_param_groups()
-        camera_optimizer_config = self.config.pipeline.datamanager.camera_optimizer
-        if camera_optimizer_config is not None and camera_optimizer_config.mode != "off":
-            assert camera_optimizer_config.param_group not in optimizer_config
-            optimizer_config[camera_optimizer_config.param_group] = {
-                "optimizer": camera_optimizer_config.optimizer,
-                "scheduler": camera_optimizer_config.scheduler,
-            }
         return Optimizers(optimizer_config, param_groups)
 
     def train(self) -> None:
@@ -269,7 +266,7 @@ class Trainer:
                         name=EventName.TRAIN_RAYS_PER_SEC,
                         duration=self.world_size
                         * self.pipeline.datamanager.get_train_rays_per_batch()
-                        / train_t.duration,
+                        / max(0.001, train_t.duration),
                         step=step,
                         avg_over_steps=True,
                     )
@@ -329,6 +326,7 @@ class Trainer:
             (self.config.is_viewer_enabled() or self.config.is_viewer_beta_enabled())
             and not self.config.is_tensorboard_enabled()
             and not self.config.is_wandb_enabled()
+            and not self.config.is_comet_enabled()
         ):
             string: str = (
                 "[NOTE] Not running eval iterations since only viewer is enabled.\n"
@@ -341,8 +339,9 @@ class Trainer:
         """Initializes viewer scene with given train dataset"""
         assert self.viewer_state and self.pipeline.datamanager.train_dataset
         self.viewer_state.init_scene(
-            dataset=self.pipeline.datamanager.train_dataset,
+            train_dataset=self.pipeline.datamanager.train_dataset,
             train_state="training",
+            eval_dataset=self.pipeline.datamanager.eval_dataset,
         )
 
     @check_viewer_enabled
@@ -409,6 +408,8 @@ class Trainer:
             # load the checkpoints for pipeline, optimizers, and gradient scalar
             self.pipeline.load_pipeline(loaded_state["pipeline"], loaded_state["step"])
             self.optimizers.load_optimizers(loaded_state["optimizers"])
+            if "schedulers" in loaded_state and self.config.load_scheduler:
+                self.optimizers.load_schedulers(loaded_state["schedulers"])
             self.grad_scaler.load_state_dict(loaded_state["scalers"])
             CONSOLE.print(f"Done loading Nerfstudio checkpoint from {load_path}")
         elif load_checkpoint is not None:
@@ -418,6 +419,8 @@ class Trainer:
             # load the checkpoints for pipeline, optimizers, and gradient scalar
             self.pipeline.load_pipeline(loaded_state["pipeline"], loaded_state["step"])
             self.optimizers.load_optimizers(loaded_state["optimizers"])
+            if "schedulers" in loaded_state and self.config.load_scheduler:
+                self.optimizers.load_schedulers(loaded_state["schedulers"])
             self.grad_scaler.load_state_dict(loaded_state["scalers"])
             CONSOLE.print(f"Done loading Nerfstudio checkpoint from {load_checkpoint}")
         else:
@@ -442,6 +445,7 @@ class Trainer:
                 if hasattr(self.pipeline, "module")
                 else self.pipeline.state_dict(),
                 "optimizers": {k: v.state_dict() for (k, v) in self.optimizers.optimizers.items()},
+                "schedulers": {k: v.state_dict() for (k, v) in self.optimizers.schedulers.items()},
                 "scalers": self.grad_scaler.state_dict(),
             },
             ckpt_path,

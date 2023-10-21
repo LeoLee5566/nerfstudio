@@ -17,15 +17,12 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Literal, Optional, Tuple, Type
 
 # model instances
 from nerfstudio.utils import writer
-
-warnings.filterwarnings("ignore", module="torchvision")
 
 
 # Pretty printing class
@@ -150,3 +147,5 @@ class ViewerConfig(PrintableConfig):
     jpeg_quality: int = 90
     """Quality tradeoff to use for jpeg compression."""
     second_model_path: Optional[str] = None
+    make_share_url: bool = False
+    """Viewer beta feature: print a shareable URL. `vis` must be set to viewer_beta; this flag is otherwise ignored."""

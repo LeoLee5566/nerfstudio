@@ -19,9 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 from nerfstudio.process_data import colmap_utils, hloc_utils, process_data_utils
-from nerfstudio.process_data.base_converter_to_nerfstudio_dataset import (
-    BaseConverterToNerfstudioDataset,
-)
+from nerfstudio.process_data.base_converter_to_nerfstudio_dataset import BaseConverterToNerfstudioDataset
 from nerfstudio.process_data.process_data_utils import CAMERA_MODELS
 from nerfstudio.utils import install_checks
 from nerfstudio.utils.rich_utils import CONSOLE
@@ -43,6 +41,9 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
     refine_pixsfm: bool = False
     """If True, runs refinement using Pixel Perfect SFM.
     Only works with hloc sfm_tool"""
+    refine_intrinsics: bool = True
+    """If True, do bundle adjustment to refine intrinsics.
+    Only works with colmap sfm_tool"""
     feature_type: Literal[
         "any",
         "sift",
@@ -96,6 +97,8 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
     """If True, export and use depth maps induced from SfM points."""
     include_depth_debug: bool = False
     """If --use-sfm-depth and this flag is True, also export debug images showing Sf overlaid upon input images."""
+    same_dimensions: bool = True
+    """Whether to assume all images are same dimensions and so to use fast downscaling with no autorotation."""
 
     @staticmethod
     def default_colmap_path() -> Path:
@@ -189,15 +192,22 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
         if self.refine_pixsfm:
             assert sfm_tool == "hloc", "refine_pixsfm only works with sfm_tool hloc"
 
+        # set the image_dir if didn't copy
+        if self.skip_image_processing:
+            image_dir = self.data
+        else:
+            image_dir = self.image_dir
+
         if sfm_tool == "colmap":
             colmap_utils.run_colmap(
-                image_dir=self.image_dir,
+                image_dir=image_dir,
                 colmap_dir=self.absolute_colmap_path,
                 camera_model=CAMERA_MODELS[self.camera_type],
                 camera_mask_path=mask_path,
                 gpu=self.gpu,
                 verbose=self.verbose,
                 matching_method=self.matching_method,
+                refine_intrinsics=self.refine_intrinsics,
                 colmap_cmd=self.colmap_cmd,
             )
         elif sfm_tool == "hloc":
@@ -208,7 +218,7 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
             assert matcher_type is not None
             assert matcher_type != "NN"  # Only used for colmap.
             hloc_utils.run_hloc(
-                image_dir=self.image_dir,
+                image_dir=image_dir,
                 colmap_dir=self.absolute_colmap_path,
                 camera_model=CAMERA_MODELS[self.camera_type],
                 verbose=self.verbose,
