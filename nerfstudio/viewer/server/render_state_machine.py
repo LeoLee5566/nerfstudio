@@ -28,7 +28,6 @@ from nerfstudio.model_components.renderers import \
 from nerfstudio.utils import colormaps, writer
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.server import viewer_utils
-from nerfstudio.viewer.server.viewer_elements import *
 from nerfstudio.viewer.viser.messages import CameraMessage
 
 if TYPE_CHECKING:

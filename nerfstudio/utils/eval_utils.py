@@ -26,8 +26,6 @@ import torch
 import yaml
 
 from nerfstudio.configs.method_configs import all_methods
-from nerfstudio.data.datamanagers.base_datamanager import \
-    VanillaDataManagerConfig
 from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils.rich_utils import CONSOLE

@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import json
-import re
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Literal, Optional
@@ -28,7 +27,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
-from nerfstudio.cameras.rays import RayBundle, RaySamples
+from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.configs import base_config as cfg
 from nerfstudio.data.datasets.base_dataset import InputDataset
 from nerfstudio.data.scene_box import SceneBox
