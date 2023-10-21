@@ -43,14 +43,6 @@ from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName
 from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.server.control_panel import ControlPanel
 from nerfstudio.viewer.server.gui_utils import parse_object
-from nerfstudio.viewer.server.render_state_machine import (RenderAction,
-                                                           RenderStateMachine)
-from nerfstudio.viewer.server.utils import \
-    get_intrinsics_matrix_and_camera_to_world_h
-from nerfstudio.viewer.server.viewer_elements import (ViewerButton,
-                                                      ViewerControl,
-                                                      ViewerElement,
-                                                      ViewerText)
 from nerfstudio.viewer.server.render_state_machine import RenderAction, RenderStateMachine
 from nerfstudio.viewer.server.utils import get_intrinsics_matrix_and_camera_to_world_h
 from nerfstudio.viewer.server.viewer_elements import ViewerControl, ViewerElement

@@ -30,11 +30,6 @@ from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils import writer
 from nerfstudio.utils.eval_utils import eval_setup
-from nerfstudio.utils.rich_utils import CONSOLE
-from nerfstudio.viewer.server.viewer_elements import (ViewerButton,
-                                                      ViewerControl,
-                                                      ViewerElement,
-                                                      ViewerText)
 from nerfstudio.viewer.server.viewer_state import ViewerState
 from nerfstudio.viewer_beta.viewer import Viewer as ViewerBetaState
 
