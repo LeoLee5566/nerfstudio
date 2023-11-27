@@ -146,6 +146,8 @@ class ViewerConfig(PrintableConfig):
     """Image format viewer should use; jpeg is lossy compression, while png is lossless."""
     jpeg_quality: int = 90
     """Quality tradeoff to use for jpeg compression."""
-    second_model_path: Optional[str] = None
+    model_to_merge: Optional[str] = None
+    blur_detect_method: Optional[str] = None
+    appearance_align: bool = False
     make_share_url: bool = False
     """Viewer beta feature: print a shareable URL. `vis` must be set to viewer_beta; this flag is otherwise ignored."""

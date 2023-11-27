@@ -140,6 +140,8 @@ class Viewer:
         self.render_statemachines: Dict[int, RenderStateMachine] = {}
         self.viser_server.on_client_disconnect(self.handle_disconnect)
         self.viser_server.on_client_connect(self.handle_new_client)
+        
+        self.model_to_merge = None
 
         tabs = self.viser_server.add_gui_tab_group()
         control_tab = tabs.add_tab("Control", viser.Icon.SETTINGS)
@@ -164,6 +166,7 @@ class Viewer:
 
         # Keep track of the pointers to generated GUI folders, because each generated folder holds a unique ID.
         viewer_gui_folders = dict()
+    
 
         def nested_folder_install(folder_labels: List[str], prev_labels: List[str], element: ViewerElement):
             if len(folder_labels) == 0:

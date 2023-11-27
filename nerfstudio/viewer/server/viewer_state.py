@@ -174,13 +174,15 @@ class ViewerState:
                 e for (_, e) in parse_object(self.trainer, ViewerControl, "Pipeline")
             ]
 
+        self.model_to_merge = None
+        self.appearance_codes = None
+        self.apperance_align_object_index = 0
+        
         for c in self.viewer_controls:
             c._setup(self)
         self.render_statemachine = RenderStateMachine(self)
         self.render_statemachine.start()
         
-
-        self.second_model = None
 
     def _output_type_change(self, _):
         self.output_type_changed = True

@@ -110,10 +110,12 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         )
         banner_messages = [f"Viewer Beta at: {viewer_state.viewer_url}"]
     
-    second_model_path = config.viewer.second_model_path
-    if second_model_path is not None:
+    # Set second models path
+    second_model_path = config.viewer.model_to_merge
+    if second_model_path is not None and config.vis == "viewer":
         _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
-        viewer_state.second_model = model.model # type: ignore
+        viewer_state.model_to_merge = model.model # type: ignore
+        viewer_state.appearance_codes = [None] * 2
 
     # We don't need logging, but writer.GLOBAL_BUFFER needs to be populated
     config.logging.local_writer.enable = False

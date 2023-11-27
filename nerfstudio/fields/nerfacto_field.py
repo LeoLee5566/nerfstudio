@@ -22,6 +22,7 @@ from typing import Dict, Literal, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
+from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.field_components.activations import trunc_exp
@@ -227,7 +228,7 @@ class NerfactoField(Field):
         return density, base_mlp_out
 
     def get_outputs(
-        self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None
+        self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None, appearance_embedding : Optional[Tensor] = None
     ) -> Dict[FieldHeadNames, Tensor]:
         assert density_embedding is not None
         outputs = {}
@@ -299,3 +300,28 @@ class NerfactoField(Field):
         outputs.update({FieldHeadNames.RGB: rgb})
 
         return outputs
+    
+    def forward(self, ray_samples: RaySamples, compute_normals: bool = False,appearance_embedding : Optional[Tensor] = None) -> Dict[FieldHeadNames, Tensor]:
+        """Evaluates the field at points along the ray.
+
+        Args:
+            ray_samples: Samples to evaluate field on.
+        """
+        if compute_normals:
+            with torch.enable_grad():
+                density, density_embedding = self.get_density(ray_samples)
+        else:
+            density, density_embedding = self.get_density(ray_samples)
+
+        field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding,appearance_embedding=appearance_embedding)
+        field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore
+
+        if compute_normals:
+            with torch.enable_grad():
+                normals = self.get_normals()
+            field_outputs[FieldHeadNames.NORMALS] = normals  # type: ignore
+        return field_outputs
+    
+    @torch.no_grad()
+    def get_appearance_code(self):
+        return self.embedding_appearance

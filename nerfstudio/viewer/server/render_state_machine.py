@@ -18,10 +18,15 @@ from __future__ import annotations
 import contextlib
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args
+from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args, List
 
+import numpy as np
 import torch
+from torch import Tensor
 
+import cv2
+
+from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.model_components.renderers import \
     background_color_override_context
@@ -29,6 +34,8 @@ from nerfstudio.utils import colormaps, writer
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.viser.messages import CameraMessage
+from nerfstudio.utils.blur_detect_utils import get_std_map,get_svd_map
+from nerfstudio.utils.appearance_align_utils import appearance_align_net
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.server.viewer_state import ViewerState
@@ -107,6 +114,64 @@ class RenderStateMachine(threading.Thread):
         if self.state == "high" and self.next_action.action in ("move", "rerender"):
             self.interrupt_render_flag = True
         self.render_trigger.set()
+        
+    # align apperance code from other models to the object model
+    def align_appearance(self,models:List[Any],camera_ray_bundle,outputs:Dict[str, torch.Tensor]):
+        align_object_index = self.viewer.apperance_align_object_index
+        code_dim = models[align_object_index].get_appearance_code().mean().shape[-1]
+        for i,m in enumerate(models):
+            if i == align_object_index or self.viewer.appearance_codes[i] is not None:
+                continue
+            else:
+                mlp = appearance_align_net(in_dim = code_dim)
+        
+        
+    def get_outputs(self, model, camera_ray_bundle,appearance_code: Optional[Tensor] = None) -> (Any,Dict[str, torch.Tensor]):
+        model.eval()
+        step = self.viewer.step
+        if self.viewer.control_panel.crop_viewport:
+            color = self.viewer.control_panel.background_color
+            if color is None:
+                background_color = torch.tensor([0.0, 0.0, 0.0], device=self.viewer.pipeline.model.device)
+            else:
+                background_color = torch.tensor(
+                            [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
+                            device=model.device,
+                        )
+            with background_color_override_context(background_color), torch.no_grad():
+                outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle,appearance_code)
+        else:
+            with torch.no_grad():
+                outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle,appearance_code)
+        model.train()
+        return step,outputs
+    
+    def merge_model(self,models:List[Any],camera_ray_bundle,outputs:Dict[str, torch.Tensor]):
+        if self.viewer.config.appearance_align and self.viewer.appearance_codes is not None:
+            align_object_index = self.viewer.apperance_align_object_index
+            self.viewer.appearance_codes[align_object_index] = models[align_object_index].get_appearance_code().mean()
+            self.align_appearance(models,camera_ray_bundle,outputs)
+        for i,model in enumerate(models):
+            if i == align_object_index:
+                continue
+            else:
+                _,next_outputs = self.get_outputs(model,camera_ray_bundle,self.viewer.appearance_codes[i])
+        result = {}
+        weight1,weight2 = 0.5,0.5
+        if self.viewer.config.blur_detect_method is not None and 'rgb' in outputs.keys():
+            if self.viewer.config.blur_detect_method == 'std':
+                map1 = get_std_map(outputs['rgb'])
+                map2 = get_std_map(next_outputs['rgb'])
+                total_weight = map1 + map2
+                weight1 = (map1 / total_weight).expand_as(outputs['rgb'])
+                weight2 = (map2 / total_weight).expand_as(outputs['rgb'])
+        for key in outputs.keys():
+            try:
+                mean_tensor = outputs[key] * weight1 + next_outputs[key] * weight2
+                result[key] = mean_tensor
+            except:
+                continue
+        return result
 
     def _render_img(self, cam_msg: CameraMessage):
         """Takes the current camera, generates rays, and renders the image
@@ -117,7 +182,9 @@ class RenderStateMachine(threading.Thread):
 
         # initialize the camera ray bundle
         model = self.viewer.get_model()
-        second_model = self.viewer.second_model
+        models = [model]
+        model_to_merge = self.viewer.model_to_merge
+        models.append(model_to_merge)
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
             crop_min=self.viewer.control_panel.crop_min,
@@ -134,36 +201,10 @@ class RenderStateMachine(threading.Thread):
             camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=model.render_aabb)
 
             with TimeWriter(None, None, write=False) as vis_t:
-                model.eval()
-                step = self.viewer.step
-                if self.viewer.control_panel.crop_viewport:
-                    color = self.viewer.control_panel.background_color
-                    if color is None:
-                        background_color = torch.tensor([0.0, 0.0, 0.0], device=self.viewer.pipeline.model.device)
-                    else:
-                        background_color = torch.tensor(
-                            [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
-                            device=model.device,
-                        )
-                    with background_color_override_context(background_color), torch.no_grad():
-                        outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
-                else:
-                    with torch.no_grad():
-                        outputs = model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
-                model.train()
-                if second_model is not None:
-                    if self.viewer.control_panel.crop_viewport:
-                        background_color = torch.tensor([0.0, 0.0, 0.0], device=second_model.device)
-                        with background_color_override_context(background_color), torch.no_grad():
-                            second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
-                    else:
-                        with torch.no_grad():
-                            second_outputs = second_model.get_outputs_for_camera_ray_bundle(camera_ray_bundle)
-                    result = {}
-                    for key in outputs.keys():
-                        mean_tensor = (outputs[key] + second_outputs[key]) / 2
-                        result[key] = mean_tensor
-                    outputs = result
+                step, outputs = self.get_outputs(model, camera_ray_bundle)
+                # merge with other models
+                if len(models) > 0:
+                    outputs = self.merge_model(models,camera_ray_bundle,outputs)
         num_rays = len(camera_ray_bundle)
         render_time = vis_t.duration
         if writer.is_initialized():
