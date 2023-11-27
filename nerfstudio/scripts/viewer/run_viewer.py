@@ -111,11 +111,13 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         banner_messages = [f"Viewer Beta at: {viewer_state.viewer_url}"]
     
     # Set second models path
-    second_model_path = config.viewer.model_to_merge
-    if second_model_path is not None and config.vis == "viewer":
-        _,model,_,_ = eval_setup(Path(second_model_path),test_mode='inference')
-        viewer_state.model_to_merge = model.model # type: ignore
-        viewer_state.appearance_codes = [None] * 2
+    models_to_merge = config.viewer.model_to_merge
+    if models_to_merge is not None and config.vis == "viewer":
+        viewer_state.model_to_merge = []
+        for m in models_to_merge:
+            _,model,_,_ = eval_setup(Path(m),test_mode='inference')
+            viewer_state.model_to_merge.append(model.model) # type: ignore
+        viewer_state.appearance_codes = [None] * (len(models_to_merge)+1)
 
     # We don't need logging, but writer.GLOBAL_BUFFER needs to be populated
     config.logging.local_writer.enable = False

@@ -116,13 +116,14 @@ class RenderStateMachine(threading.Thread):
         self.render_trigger.set()
         
     # align apperance code from other models to the object model
-    def align_appearance(self,models:List[Any],camera_ray_bundle,outputs:Dict[str, torch.Tensor]):
+    def align_appearance(self,models:List[Any],camera_ray_bundle):
         align_object_index = self.viewer.apperance_align_object_index
         code_dim = models[align_object_index].get_appearance_code().mean().shape[-1]
         for i,m in enumerate(models):
             if i == align_object_index or self.viewer.appearance_codes[i] is not None:
                 continue
             else:
+                init_appearance_code = m.get_appearance_code().mean()
                 mlp = appearance_align_net(in_dim = code_dim)
         
         
@@ -150,27 +151,29 @@ class RenderStateMachine(threading.Thread):
         if self.viewer.config.appearance_align and self.viewer.appearance_codes is not None:
             align_object_index = self.viewer.apperance_align_object_index
             self.viewer.appearance_codes[align_object_index] = models[align_object_index].get_appearance_code().mean()
-            self.align_appearance(models,camera_ray_bundle,outputs)
-        for i,model in enumerate(models):
-            if i == align_object_index:
-                continue
-            else:
-                _,next_outputs = self.get_outputs(model,camera_ray_bundle,self.viewer.appearance_codes[i])
+            self.align_appearance(models,camera_ray_bundle)
+        
         result = {}
-        weight1,weight2 = 0.5,0.5
-        if self.viewer.config.blur_detect_method is not None and 'rgb' in outputs.keys():
-            if self.viewer.config.blur_detect_method == 'std':
-                map1 = get_std_map(outputs['rgb'])
-                map2 = get_std_map(next_outputs['rgb'])
-                total_weight = map1 + map2
-                weight1 = (map1 / total_weight).expand_as(outputs['rgb'])
-                weight2 = (map2 / total_weight).expand_as(outputs['rgb'])
+        outputs_list = []
+        weights = [1/len(models)]*len(models)
+        total_weight = None
+        for i,model in enumerate(models):
+            _,o = self.get_outputs(model,camera_ray_bundle,None if self.viewer.appearance_codes is None else self.viewer.appearance_codes[i])
+            outputs_list.append(o)
+            if self.viewer.config.blur_detect_method is not None and 'rgb' in o.keys():
+                if self.viewer.config.blur_detect_method == 'std':
+                    map = get_std_map(o['rgb'])
+                    total_weight = map if total_weight is None else total_weight + map
+                    weights[i] = map
+
+ 
         for key in outputs.keys():
-            try:
-                mean_tensor = outputs[key] * weight1 + next_outputs[key] * weight2
-                result[key] = mean_tensor
-            except:
-                continue
+            mean_tensor = torch.zeros_like(outputs['rgb'])
+            for i,o in enumerate(outputs_list):
+                if self.viewer.config.blur_detect_method is not None:
+                    weights[i] = (weights[i] / total_weight).expand_as(o['rgb'])
+                mean_tensor += o[key] * weights[i]
+            result[key] = mean_tensor
         return result
 
     def _render_img(self, cam_msg: CameraMessage):
@@ -182,9 +185,7 @@ class RenderStateMachine(threading.Thread):
 
         # initialize the camera ray bundle
         model = self.viewer.get_model()
-        models = [model]
-        model_to_merge = self.viewer.model_to_merge
-        models.append(model_to_merge)
+        models = [model] + self.viewer.model_to_merge
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
             crop_min=self.viewer.control_panel.crop_min,

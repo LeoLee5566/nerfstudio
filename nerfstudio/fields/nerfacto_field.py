@@ -245,7 +245,11 @@ class NerfactoField(Field):
         if self.training:
             embedded_appearance = self.embedding_appearance(camera_indices)
         else:
-            if self.use_average_appearance_embedding:
+            if appearance_embedding is not None and self.use_average_appearance_embedding:
+                embedded_appearance = embedded_appearance = torch.ones(
+                    (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                ) * appearance_embedding
+            elif self.use_average_appearance_embedding:
                 embedded_appearance = torch.ones(
                     (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
                 ) * self.embedding_appearance.mean(dim=0)
