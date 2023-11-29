@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args,
 import numpy as np
 import torch
 from torch import Tensor
+import torch.optim as optim
 
 import cv2
 
@@ -119,13 +120,27 @@ class RenderStateMachine(threading.Thread):
     def align_appearance(self,models:List[Any],camera_ray_bundle):
         align_object_index = self.viewer.apperance_align_object_index
         code_dim = models[align_object_index].get_appearance_code().mean().shape[-1]
+        target = models[align_object_index].get_outputs_for_camera_ray_bundle(camera_ray_bundle)['rgb']
         for i,m in enumerate(models):
             if i == align_object_index or self.viewer.appearance_codes[i] is not None:
                 continue
             else:
-                init_appearance_code = m.get_appearance_code().mean()
-                mlp = appearance_align_net(in_dim = code_dim)
-        
+                device = torch.device('cuda')
+                code = m.get_appearance_code().mean()
+                mlp = appearance_align_net(in_dim = code_dim).to(device)
+                optimizer = optim.Adam(mlp.parameters(), lr=self.viewer.align_network_learning_rate)
+                for epoch in range(self.viewer.align_network_max_iter):
+                    mlp.train()
+
+                    code = mlp(code)
+                    loss = mlp.get_loss(m,camera_ray_bundle,code,target)
+                    
+                    CONSOLE.print(loss)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                self.viewer.appearance_codes[i] = code
+                    
         
     def get_outputs(self, model, camera_ray_bundle,appearance_code: Optional[Tensor] = None) -> (Any,Dict[str, torch.Tensor]):
         model.eval()
@@ -166,8 +181,11 @@ class RenderStateMachine(threading.Thread):
                     total_weight = map if total_weight is None else total_weight + map
                     weights[i] = map
 
- 
+
         for key in outputs.keys():
+            if key in ["weights","ray_samples_rgb"]:
+                CONSOLE.print(outputs[key].shape)
+                continue
             mean_tensor = torch.zeros_like(outputs['rgb'])
             for i,o in enumerate(outputs_list):
                 if self.viewer.config.blur_detect_method is not None:
@@ -185,7 +203,10 @@ class RenderStateMachine(threading.Thread):
 
         # initialize the camera ray bundle
         model = self.viewer.get_model()
-        models = [model] + self.viewer.model_to_merge
+        if self.viewer.model_to_merge:
+            models = [model] + self.viewer.model_to_merge
+        else:
+            models = []
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
             crop_min=self.viewer.control_panel.crop_min,

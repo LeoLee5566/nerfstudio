@@ -245,7 +245,7 @@ class NerfactoField(Field):
         if self.training:
             embedded_appearance = self.embedding_appearance(camera_indices)
         else:
-            if appearance_embedding is not None and self.use_average_appearance_embedding:
+            if appearance_embedding is not None:
                 embedded_appearance = embedded_appearance = torch.ones(
                     (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
                 ) * appearance_embedding
@@ -300,6 +300,7 @@ class NerfactoField(Field):
             ],
             dim=-1,
         )
+        
         rgb = self.mlp_head(h).view(*outputs_shape, -1).to(directions)
         outputs.update({FieldHeadNames.RGB: rgb})
 
@@ -316,8 +317,9 @@ class NerfactoField(Field):
                 density, density_embedding = self.get_density(ray_samples)
         else:
             density, density_embedding = self.get_density(ray_samples)
-
+        
         field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding,appearance_embedding=appearance_embedding)
+
         field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore
 
         if compute_normals:
@@ -325,6 +327,31 @@ class NerfactoField(Field):
                 normals = self.get_normals()
             field_outputs[FieldHeadNames.NORMALS] = normals  # type: ignore
         return field_outputs
+    
+    def get_rgb_for_appearance(self, ray_samples: RaySamples,appearance_embedding : Optional[Tensor] = None) -> Tensor:
+        density, density_embedding = self.get_density(ray_samples)
+        directions = get_normalized_directions(ray_samples.frustums.directions)
+        directions_flat = directions.view(-1, 3)
+        d = self.direction_encoding(directions_flat)
+
+        outputs_shape = ray_samples.frustums.directions.shape[:-1]
+
+        # appearance
+        if self.use_average_appearance_embedding:
+                embedded_appearance = embedded_appearance = torch.ones(
+                    (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                ) * appearance_embedding
+
+        h = torch.cat(
+            [
+                d,
+                density_embedding.view(-1, self.geo_feat_dim),
+                embedded_appearance.view(-1, self.appearance_embedding_dim),
+            ],
+            dim=-1,
+        )
+        rgb = self.mlp_head(h).view(*outputs_shape, -1).to(directions)
+        return rgb,density
     
     @torch.no_grad()
     def get_appearance_code(self):

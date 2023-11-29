@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import Parameter
+from nerfstudio.utils.rich_utils import CONSOLE
 from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image import PeakSignalNoiseRatio
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
@@ -308,23 +309,24 @@ class NerfactoModel(Model):
             depth = self.renderer_depth(weights=weights, ray_samples=ray_samples)
         expected_depth = self.renderer_expected_depth(weights=weights, ray_samples=ray_samples)
         accumulation = self.renderer_accumulation(weights=weights)
-
         outputs = {
             "rgb": rgb,
             "accumulation": accumulation,
             "depth": depth,
             "expected_depth": expected_depth,
+            "weights": weights,
+            "ray_samples_rgb":field_outputs[FieldHeadNames.RGB]
         }
-
+        
         if self.config.predict_normals:
             normals = self.renderer_normals(normals=field_outputs[FieldHeadNames.NORMALS], weights=weights)
             pred_normals = self.renderer_normals(field_outputs[FieldHeadNames.PRED_NORMALS], weights=weights)
             outputs["normals"] = self.normals_shader(normals)
             outputs["pred_normals"] = self.normals_shader(pred_normals)
         # These use a lot of GPU memory, so we avoid storing them for eval.
-        if self.training:
-            outputs["weights_list"] = weights_list
-            outputs["ray_samples_list"] = ray_samples_list
+        # if self.training:
+        #     outputs["weights_list"] = weights_list
+        #     outputs["ray_samples_list"] = ray_samples_list
 
         if self.training and self.config.predict_normals:
             outputs["rendered_orientation_loss"] = orientation_loss(
@@ -450,6 +452,7 @@ class NerfactoModel(Model):
             # move the chunk inputs to the model device
             ray_bundle = ray_bundle.to(self.device)
             outputs = self.forward(ray_bundle=ray_bundle,appearance_embedding=appearance_embedding)
+            
             for output_name, output in outputs.items():  # type: ignore
                 if not isinstance(output, torch.Tensor):
                     # TODO: handle lists of tensors as well
@@ -458,9 +461,42 @@ class NerfactoModel(Model):
                 outputs_lists[output_name].append(output.to(input_device))
         outputs = {}
         for output_name, outputs_list in outputs_lists.items():
-            outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
+            if output_name == 'ray_samples_rgb':
+                outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width,-1, 3)
+            else:
+                outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
         return outputs
     
+    @torch.no_grad()
+    def get_rgb_for_appearance(self, camera_ray_bundle: RayBundle,appearance_embedding : Optional[Tensor] = None) -> Tensor:
+        input_device = camera_ray_bundle.directions.device
+        num_rays_per_chunk = self.config.eval_num_rays_per_chunk
+        image_height, image_width = camera_ray_bundle.origins.shape[:2]
+        num_rays = len(camera_ray_bundle)
+        rgb_list = []
+        for i in range(0, num_rays, num_rays_per_chunk):
+            start_idx = i
+            end_idx = i + num_rays_per_chunk
+            ray_bundle = camera_ray_bundle.get_row_major_sliced_ray_bundle(start_idx, end_idx)
+            # move the chunk inputs to the model device
+            ray_bundle = ray_bundle.to(self.device)
+            if self.collider is not None:
+                ray_bundle = self.collider(ray_bundle)
+            ray_samples: RaySamples
+            ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns)
+            rgb,density = self.field.get_rgb_for_appearance(ray_samples, appearance_embedding = appearance_embedding)
+            rgb.requires_grad_()
+
+            weights = ray_samples.get_weights(density)
+            weights_list.append(weights)
+            ray_samples_list.append(ray_samples)
+            rgb = self.renderer_rgb(rgb, weights=weights)
+            rgb_list.append(rgb.to(input_device))
+        rgb = torch.cat(rgb_list).view(image_height, image_width, -1) 
+        rgb.requires_grad_()
+        return rgb
+            
+            
     @torch.no_grad()
     def get_appearance_code(self):
         return self.field.get_appearance_code()

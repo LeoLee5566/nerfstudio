@@ -177,6 +177,8 @@ class ViewerState:
         self.model_to_merge = None
         self.appearance_codes = None
         self.apperance_align_object_index = 0
+        self.align_network_max_iter = 20
+        self.align_network_learning_rate = 0.01
         
         for c in self.viewer_controls:
             c._setup(self)
