@@ -174,7 +174,9 @@ class ViewerState:
                 e for (_, e) in parse_object(self.trainer, ViewerControl, "Pipeline")
             ]
 
+        # nerf merge config
         self.model_to_merge = None
+        self.merge_method = None
         self.appearance_codes = None
         self.apperance_align_object_index = 0
         self.align_network_max_iter = 20

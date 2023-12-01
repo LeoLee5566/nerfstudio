@@ -147,6 +147,7 @@ class ViewerConfig(PrintableConfig):
     jpeg_quality: int = 90
     """Quality tradeoff to use for jpeg compression."""
     model_to_merge: Optional[List[str]] = None
+    merge_method: Optional[str] = None
     blur_detect_method: Optional[str] = None
     appearance_align: bool = False
     make_share_url: bool = False

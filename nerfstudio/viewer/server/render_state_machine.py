@@ -37,6 +37,7 @@ from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.viser.messages import CameraMessage
 from nerfstudio.utils.blur_detect_utils import get_std_map,get_svd_map
 from nerfstudio.utils.appearance_align_utils import appearance_align_net
+from nerfstudio.model_components.renderers import RGBRenderer
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.server.viewer_state import ViewerState
@@ -172,25 +173,40 @@ class RenderStateMachine(threading.Thread):
         outputs_list = []
         weights = [1/len(models)]*len(models)
         total_weight = None
+        blur_weights = [1/len(models)]*len(models)
+        total_blur_weights = None
         for i,model in enumerate(models):
             _,o = self.get_outputs(model,camera_ray_bundle,None if self.viewer.appearance_codes is None else self.viewer.appearance_codes[i])
             outputs_list.append(o)
+            if self.viewer.config.merge_method == 'idw3' and  all(key in o.keys() for key in ["rgb","weights","ray_samples_rgb"]):
+                total_weight = o['weights'] if total_weight is None else total_weight + o['weights']
+                weights[i] = o['weights']
+            
+                
             if self.viewer.config.blur_detect_method is not None and 'rgb' in o.keys():
                 if self.viewer.config.blur_detect_method == 'std':
-                    map = get_std_map(o['rgb'])
-                    total_weight = map if total_weight is None else total_weight + map
-                    weights[i] = map
+                    blur_map = get_std_map(o['rgb'])
+                    total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
+                    blur_weights[i] = blur_map 
 
+        total_weight[total_weight == 0] = 1.
+        total_blur_weights[total_blur_weights == 0] = 1.
 
-        for key in outputs.keys():
-            if key in ["weights","ray_samples_rgb"]:
-                CONSOLE.print(outputs[key].shape)
-                continue
+        for i,key in enumerate(outputs.keys()):
             mean_tensor = torch.zeros_like(outputs['rgb'])
-            for i,o in enumerate(outputs_list):
+            if key in ["weights","ray_samples_rgb"]:
+                continue
+            for j,o in enumerate(outputs_list):
+                if self.viewer.config.merge_method == 'idw3' and key == 'rgb' :
+                    # TODO: IDW3
+                    # weights[j] = (weights[j] / total_weight)
+                    screen_shape = o["rgb"].shape
+                    rgb = o["ray_samples_rgb"].reshape(-1, o["ray_samples_rgb"].size(2), o["ray_samples_rgb"].size(3))
+                    w = weights[j].reshape(-1, o["ray_samples_rgb"].size(2), 1)
+                    o['rgb'] = model.renderer_rgb(rgb, w).reshape(screen_shape)  #* len(models)
                 if self.viewer.config.blur_detect_method is not None:
-                    weights[i] = (weights[i] / total_weight).expand_as(o['rgb'])
-                mean_tensor += o[key] * weights[i]
+                    blur_weights[j] = (blur_weights[j] / total_blur_weights).expand_as(o['rgb'])
+                mean_tensor += o[key] * blur_weights[j]
             result[key] = mean_tensor
         return result
 

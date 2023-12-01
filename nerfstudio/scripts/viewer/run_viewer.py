@@ -114,6 +114,7 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
     models_to_merge = config.viewer.model_to_merge
     if models_to_merge is not None and config.vis == "viewer":
         viewer_state.model_to_merge = []
+        viewer_state.merge_method = config.viewer.merge_method
         for m in models_to_merge:
             _,model,_,_ = eval_setup(Path(m),test_mode='inference')
             viewer_state.model_to_merge.append(model.model) # type: ignore
