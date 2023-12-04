@@ -35,6 +35,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
+from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.utils import colors
 from nerfstudio.utils.math import components_from_spherical_harmonics, safe_normalize
