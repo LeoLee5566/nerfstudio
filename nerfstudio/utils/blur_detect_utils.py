@@ -7,7 +7,8 @@ import torch
 def get_std_map(image:torch.Tensor,kernel_size:int=7) -> torch.Tensor:
   device = image.device
   image = (image.cpu().numpy() * 255).astype(np.uint8)
-  image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+  if image.shape[2] == 3:
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
   laplacian = cv2.Laplacian(image, cv2.CV_64F)
 
   # Take the absolute value of the edge detection result to ensure non-negative values

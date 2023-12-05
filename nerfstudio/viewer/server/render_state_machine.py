@@ -171,7 +171,6 @@ class RenderStateMachine(threading.Thread):
         
         result = {}
         outputs_list = []
-        weights = [1/len(models)]*len(models)
         total_weight = None
         blur_weights = [1/len(models)]*len(models)
         total_blur_weights = None
@@ -180,12 +179,15 @@ class RenderStateMachine(threading.Thread):
             outputs_list.append(o)
             if self.viewer.config.merge_method == 'idw3' and  all(key in o.keys() for key in ["rgb","weights","ray_samples_rgb"]):
                 total_weight = o['weights'] if total_weight is None else total_weight + o['weights']
-                weights[i] = o['weights']
             
                 
-            if self.viewer.config.blur_detect_method is not None and 'rgb' in o.keys():
+            if self.viewer.config.blur_detect_method is not None and all(key in o.keys() for key in ["rgb","weights","ray_samples_rgb"]):
                 if self.viewer.config.blur_detect_method == 'std':
-                    blur_map = get_std_map(o['rgb'])
+                    maps = []
+                    for j in range(o['weights'].size(2)):  
+                        sliced_w=o['weights'][:, :, j].unsqueeze(2)
+                        maps.append(get_std_map(sliced_w))
+                    blur_map = torch.sum(torch.stack(maps, dim=2),dim=2)/o['weights'].size(2)
                     total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
                     blur_weights[i] = blur_map 
 
@@ -200,7 +202,7 @@ class RenderStateMachine(threading.Thread):
                     # IDW3
                     screen_shape = o["rgb"].shape
                     rgb = o["ray_samples_rgb"].reshape(-1, o["ray_samples_rgb"].size(2), o["ray_samples_rgb"].size(3))
-                    w = torch.where(weights[j] !=0, total_weight/len(models), weights[j])
+                    w = torch.where(o['weights'] !=0, total_weight/len(models), o['weights'])
                     w = (w).reshape(-1, o["ray_samples_rgb"].size(2), 1) 
                     o['rgb'] = torch.sum(w * rgb, dim=-2).reshape(screen_shape)  
                 if self.viewer.config.blur_detect_method is not None and key == 'rgb':
