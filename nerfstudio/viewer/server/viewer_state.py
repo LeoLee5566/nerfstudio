@@ -143,6 +143,7 @@ class ViewerState:
             self._output_split_type_change,
             self._get_density,
             self._set_pose,
+            self._get_blur_map,
         )
 
         def nested_folder_install(folder_labels: List[str], element: ViewerElement):
@@ -231,7 +232,18 @@ class ViewerState:
         self.camera_message = msg
         self._interrupt_render
 
-        
+    def _get_blur_map(self, _) -> None:
+        camera = self.get_camera(480,720)
+        if camera is None:
+                # returns None when the viewer is not connected yet
+                return
+        model = self.get_model()
+        bundle = camera.generate_rays(camera_indices=0,aabb_box=model.render_aabb)
+        with torch.no_grad():
+            field_outputs = model.get_outputs_for_camera_ray_bundle(bundle)
+        if 'weights' in field_outputs.keys():
+            torch.save(field_outputs['weights'], './outputs/weights.pt')
+            CONSOLE.print(f"Weights {field_outputs['weights'].shape} saved to ./outputs/weights.pt")
 
     def _crop_params_update(self, _) -> None:
         """Update crop parameters"""

@@ -51,6 +51,7 @@ class ControlPanel:
         update_split_output_cb: Callable,
         get_density_cb: Callable,
         set_pose_cb: Callable,
+        get_blur_map_cb: Callable,
     ):
         # elements holds a mapping from tag: [elements]
         self.viser_server = viser_server
@@ -181,11 +182,14 @@ class ControlPanel:
         self.set_pose_button = ViewerButton(name="Set Camera Pose",cb_hook=set_pose_cb)
         self.camera_pose = ViewerText(name="Camera Pose", default_value='()')
         
+        self.get_blur_map_button = ViewerButton(name="Get Blur Map",cb_hook=get_blur_map_cb)
+        
         with self.viser_server.gui_folder("Camera Info"):
             self.add_element(self.central_density_value)
             self.add_element(self.get_density_button)
             self.add_element(self.camera_pose)
             self.add_element(self.set_pose_button)
+            self.add_element(self.get_blur_map_button)
 
     def _train_speed_cb(self) -> None:
         """Callback for when the train speed is changed"""

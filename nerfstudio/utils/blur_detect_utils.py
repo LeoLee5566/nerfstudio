@@ -3,7 +3,27 @@
 import numpy as np
 import cv2
 import torch
+import torch.nn.functional as F
 
+def gaussian_kernel(size=3, sigma=1):
+    ax = np.linspace(-(size - 1) / 2., (size - 1) / 2., size)
+    xx, yy, zz = np.meshgrid(ax, ax, ax)
+
+    kernel = np.exp(-(xx**2 + yy**2 + zz**2) / (2 * sigma**2))
+
+    kernel = kernel / np.sum(kernel)
+
+    return torch.from_numpy(kernel).float().unsqueeze(0).unsqueeze(0)
+  
+def apply_kernel(tensor:torch.Tensor) -> torch.Tensor:
+    device = tensor.device
+    tensor_batched = tensor.unsqueeze(0)
+    kernel = gaussian_kernel().to(device)
+
+    result = F.conv3d(tensor_batched, kernel, padding=1)
+
+    return result.squeeze(0)
+  
 def get_std_map(image:torch.Tensor,kernel_size:int=7) -> torch.Tensor:
   device = image.device
   image = (image.cpu().numpy() * 255).astype(np.uint8)

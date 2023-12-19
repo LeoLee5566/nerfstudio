@@ -35,7 +35,7 @@ from nerfstudio.utils import colormaps, writer
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.server import viewer_utils
 from nerfstudio.viewer.viser.messages import CameraMessage
-from nerfstudio.utils.blur_detect_utils import get_std_map,get_svd_map
+from nerfstudio.utils.blur_detect_utils import get_std_map,get_svd_map,apply_kernel
 from nerfstudio.utils.appearance_align_utils import appearance_align_net
 from nerfstudio.model_components.renderers import RGBRenderer
 
@@ -184,10 +184,11 @@ class RenderStateMachine(threading.Thread):
             if self.viewer.config.blur_detect_method is not None and all(key in o.keys() for key in ["rgb","weights","ray_samples_rgb"]):
                 if self.viewer.config.blur_detect_method == 'std':
                     maps = []
-                    for j in range(o['weights'].size(2)):  
-                        sliced_w=o['weights'][:, :, j].unsqueeze(2)
+                    w_gaussian = apply_kernel(o['weights'])
+                    for j in range(w_gaussian.size(2)):  
+                        sliced_w=w_gaussian[:, :, j].unsqueeze(2)
                         maps.append(get_std_map(sliced_w))
-                    blur_map = torch.sum(torch.stack(maps, dim=2),dim=2)/o['weights'].size(2)
+                    blur_map = torch.sum(torch.stack(maps, dim=2),dim=2)/w_gaussian.size(2)
                     total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
                     blur_weights[i] = blur_map 
 
