@@ -69,7 +69,6 @@ def get_svd_map(image:torch.Tensor, win_size:int=3, sv_num:int=1) -> torch.Tenso
   
 def get_svd_map_3D(sample:torch.Tensor,  win_size:int=3, sv_num:int=1):
     device = sample.device
-    # Extracting the dimensions of the tensor
     height, width, channel, _ = sample.shape
 
     singular_values = np.zeros((height, width, channel, win_size**2))
@@ -87,9 +86,9 @@ def get_svd_map_3D(sample:torch.Tensor,  win_size:int=3, sv_num:int=1):
     for i in range(height):
         for j in range(width):
             for c in range(channel):
-                top_k_singular_values = singular_values[i, j, c, :k]
+                top_k_singular_values = singular_values[i, j, c, :sv_num]
                 svd_ratio = np.sum(top_k_singular_values) / np.sum(singular_values[i, j, c])
                 result[i, j, c] = svd_ratio
-
+    result = result.unsqueeze(0)
     blur_map = np.ones_like(sample, dtype=float) - ((result-result.min())/(result.max()-result.min())) if result.max() != result.min() else np.zeros_like(sample, dtype=float)
     return torch.from_numpy(blur_map).to(device)
