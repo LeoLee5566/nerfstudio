@@ -244,6 +244,10 @@ class ViewerState:
         if 'weights' in field_outputs.keys():
             torch.save(field_outputs['weights'], './outputs/weights.pt')
             CONSOLE.print(f"Weights {field_outputs['weights'].shape} saved to ./outputs/weights.pt")
+        if 'ray_samples_rgb' in field_outputs.keys():
+            torch.save(field_outputs['ray_samples_rgb'], './outputs/ray_samples_rgb.pt')
+        if 'rgb' in field_outputs.keys():
+            torch.save(field_outputs['rgb'], './outputs/rgb.pt')
 
     def _crop_params_update(self, _) -> None:
         """Update crop parameters"""

@@ -191,6 +191,10 @@ class RenderStateMachine(threading.Thread):
                     blur_map = torch.sum(torch.stack(maps, dim=2),dim=2)/w_gaussian.size(2)
                     total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
                     blur_weights[i] = blur_map 
+                if self.viewer.config.blur_detect_method == 'svd':
+                    blur_map = get_svd_map(o['rgb'])
+                    total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
+                    blur_weights[i] = blur_map 
 
         
 
@@ -207,8 +211,7 @@ class RenderStateMachine(threading.Thread):
                     w = (w).reshape(-1, o["ray_samples_rgb"].size(2), 1) 
                     o['rgb'] = torch.sum(w * rgb, dim=-2).reshape(screen_shape)  
                 if self.viewer.config.blur_detect_method is not None and key == 'rgb':
-                    total_blur_weights[total_blur_weights == 0] = 1.
-                    blur_weights[j] = (blur_weights[j] / total_blur_weights).expand_as(o['rgb'])
+                    blur_weights[j] = torch.where(total_blur_weights != 0, blur_weights[j] / total_blur_weights, torch.ones_like(blur_weights[j])/len(models)).expand_as(o['rgb'])
                 mean_tensor += o[key] * blur_weights[j]
             result[key] = mean_tensor
         return result

@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm, trange
 
 def gaussian_kernel(size=3, sigma=1):
     ax = np.linspace(-(size - 1) / 2., (size - 1) / 2., size)
@@ -44,15 +45,17 @@ def get_std_map(image:torch.Tensor,kernel_size:int=7) -> torch.Tensor:
   local_stddev_map_normalized = cv2.normalize(local_stddev_map, None, 0, 255, cv2.NORM_MINMAX)
   return torch.from_numpy(local_stddev_map_normalized)[:,:,None].to(device)
 
-def get_svd_map(image:torch.Tensor, win_size:int=5, sv_num:int=2) -> torch.Tensor:
+
+def get_svd_map(image:torch.Tensor, win_size:int=3, sv_num:int=1) -> torch.Tensor:
     device = image.device
     image = (image.cpu().numpy() * 255).astype(np.uint8)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image.shape[2] == 3:
+      image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     pad_width = win_size // 2
     padded_image = np.pad(image, pad_width, mode='edge')
     result = np.zeros_like(image, dtype=float)
 
-    for i in range(image.shape[0]):
+    for i in trange(image.shape[0]):
         for j in range(image.shape[1]):
             window = padded_image[i:i+win_size, j:j+win_size]
 
@@ -61,5 +64,32 @@ def get_svd_map(image:torch.Tensor, win_size:int=5, sv_num:int=2) -> torch.Tenso
             ratio = np.sum(S[:sv_num]) / np.sum(S) if np.sum(S) != 0 else 1
             result[i, j] = ratio
 
-    blur_map = (result-result.min())/(result.max()-result.min())
+    blur_map = np.ones_like(image, dtype=float) - ((result-result.min())/(result.max()-result.min())) if result.max() != result.min() else np.zeros_like(image, dtype=float)
     return torch.from_numpy(blur_map)[:,:,None].to(device)
+  
+def get_svd_map_3D(sample:torch.Tensor,  win_size:int=3, sv_num:int=1):
+    device = sample.device
+    # Extracting the dimensions of the tensor
+    height, width, channel, _ = sample.shape
+
+    singular_values = np.zeros((height, width, channel, win_size**2))
+
+    for i in trange(height):
+        for j in range(width):
+            for c in range(channel):
+                window = sample[i:i+win_size, j:j+win_size, c, 0]
+                U, S, Vh = np.linalg.svd(window, full_matrices=False)
+                singular_values[i, j, c, :len(S)] = S
+
+    # Compute the top k SVD ratios
+    result = np.zeros((height, width, channel))
+
+    for i in range(height):
+        for j in range(width):
+            for c in range(channel):
+                top_k_singular_values = singular_values[i, j, c, :k]
+                svd_ratio = np.sum(top_k_singular_values) / np.sum(singular_values[i, j, c])
+                result[i, j, c] = svd_ratio
+
+    blur_map = np.ones_like(sample, dtype=float) - ((result-result.min())/(result.max()-result.min())) if result.max() != result.min() else np.zeros_like(sample, dtype=float)
+    return torch.from_numpy(blur_map).to(device)
