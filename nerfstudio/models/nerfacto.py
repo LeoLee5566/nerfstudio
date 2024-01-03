@@ -324,9 +324,9 @@ class NerfactoModel(Model):
             outputs["normals"] = self.normals_shader(normals)
             outputs["pred_normals"] = self.normals_shader(pred_normals)
         # These use a lot of GPU memory, so we avoid storing them for eval.
-        # if self.training:
-        #     outputs["weights_list"] = weights_list
-        #     outputs["ray_samples_list"] = ray_samples_list
+        if self.training:
+            outputs["weights_list"] = weights_list
+            outputs["ray_samples_list"] = ray_samples_list
 
         if self.training and self.config.predict_normals:
             outputs["rendered_orientation_loss"] = orientation_loss(
