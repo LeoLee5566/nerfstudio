@@ -186,7 +186,7 @@ class RenderStateMachine(threading.Thread):
                     maps = []
                     w_gaussian = apply_kernel(o['weights'])
                     for j in range(w_gaussian.size(2)):  
-                        sliced_w=w_gaussian[:, :, j].unsqueeze(2)
+                        sliced_w=(w_gaussian[:, :, j,None]*o['ray_samples_rgb'][:,:,j])
                         maps.append(get_std_map(sliced_w))
                     blur_map = torch.sum(torch.stack(maps, dim=2),dim=2)/w_gaussian.size(2)
                     total_blur_weights = blur_map if total_blur_weights is None else total_blur_weights + blur_map
@@ -207,7 +207,7 @@ class RenderStateMachine(threading.Thread):
                     # IDW3
                     screen_shape = o["rgb"].shape
                     rgb = o["ray_samples_rgb"].reshape(-1, o["ray_samples_rgb"].size(2), o["ray_samples_rgb"].size(3))
-                    w = torch.where(o['weights'] !=0, total_weight/len(models), o['weights'])
+                    w = total_weight/len(models)
                     w = (w).reshape(-1, o["ray_samples_rgb"].size(2), 1) 
                     o['rgb'] = torch.sum(w * rgb, dim=-2).reshape(screen_shape)  
                 if self.viewer.config.blur_detect_method is not None and key == 'rgb':
