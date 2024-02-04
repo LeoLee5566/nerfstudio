@@ -32,7 +32,6 @@ def get_std_map(image:torch.Tensor,kernel_size:int=7) -> torch.Tensor:
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
   laplacian = cv2.Laplacian(image, cv2.CV_64F)
 
-  # Take the absolute value of the edge detection result to ensure non-negative values
   laplacian_abs = np.absolute(laplacian)
   # Compute local variance or standard deviation around each pixel
   local_variance_map = cv2.blur(laplacian_abs**2, (kernel_size, kernel_size)) - \
